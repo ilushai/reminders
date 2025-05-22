@@ -1,0 +1,4 @@
+aiogram==2.25.1
+openai>=1.0.0
+pytz
+requests
