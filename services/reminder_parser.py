@@ -57,7 +57,7 @@ def clean_json(raw):
 def parse_reminder(text, now_iso: str):
     user_prompt = f"Текущий момент: {now_iso}\nПользователь: {text}"
     completion = openai.ChatCompletion.create(
-        model="gpt-4o",
+        model="gpt-4o-mini",
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_prompt}
