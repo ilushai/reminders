@@ -67,13 +67,12 @@ def pretty_reminder(parsed):
         EMOJI_TEXT = "🤸‍♂️"
 
     EMOJI_TIME = "🕒"
-    EMOJI_BELL = "🔔"
     EMOJI_ARROW = "➡️"
 
     return (
         f"{EMOJI_TIME} <b>{event_str}</b>\n"
         f"{EMOJI_TEXT} <b>{text}</b>\n"
-        f"{EMOJI_BELL} Напомнить: <b>{remind_str}</b> {EMOJI_ARROW} <i>({before_str} до события)</i>"
+        f"Напомнить: <b>{remind_str}</b> {EMOJI_ARROW} <i>({before_str} до события)</i>"
     )
 
 def group_reminders_by_day(reminders):
@@ -124,21 +123,42 @@ async def cmd_list(message: types.Message):
 
     msg = "📅 <b>Твои напоминания:</b>\n\n"
 
+    def cap_task(t: str) -> str:
+        t = t.strip()
+        if not t:
+            return t
+        if t[0].isalnum():
+            return t[0].upper() + t[1:]
+        parts = t.split(" ", 1)
+        if len(parts) == 2:
+            return parts[0] + " " + parts[1].capitalize()
+        return t
+
+    def group_by_day(items):
+        grouped = defaultdict(list)
+        for ev_dt, text, rem_bef in items:
+            grouped[ev_dt.date()].append((ev_dt, text, rem_bef))
+        return grouped
+
+    def day_label(day):
+        today = now.date()
+        tomorrow = today + datetime.timedelta(days=1)
+        if day == today:
+            return f"Сегодня ({day.strftime('%d %b')})"
+        if day == tomorrow:
+            return f"Завтра ({day.strftime('%d %b')})"
+        weekday = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'][day.weekday()]
+        return f"{day.strftime('%d %b')} ({weekday})"
+
     # --- Будущие напоминания ---
     if future:
-        cal = group_reminders_by_day(future)
-        for day, items in sorted(cal.items(), key=lambda x: x[0]):
-            msg += f"<b>{day}:</b>\n"
-            for idx, (event_dt, text, remind_before) in enumerate(sorted(items), 1):
+        calendar = group_by_day(sorted(future, key=lambda x: x[0]))
+        for day in sorted(calendar.keys()):
+            msg += f"<b>{day_label(day)}:</b>\n"
+            for event_dt, text, _ in sorted(calendar[day], key=lambda x: x[0]):
                 time_str = event_dt.strftime('%H:%M')
-                emoji = "🔔"
-                if any(word in text.lower() for word in ["тренировка", "спорт"]):
-                    emoji = "🏀"
-                elif any(word in text.lower() for word in ["поесть", "кушать", "ужин", "завтрак", "обед"]):
-                    emoji = "🍽️"
-                elif any(word in text.lower() for word in ["размяться", "разминка"]):
-                    emoji = "🤸‍♂️"
-                msg += f"{idx}. {emoji} <b>{time_str}</b> — <b>{text}</b>\n"
+                text_fmt = cap_task(text)
+                msg += f"<code>{time_str}</code> — {text_fmt}\n"
             msg += "\n"
     else:
         msg += "<i>Нет будущих напоминаний.</i>\n\n"
@@ -146,19 +166,13 @@ async def cmd_list(message: types.Message):
     # --- Прошедшие напоминания ---
     if past:
         msg += "⏳ <b>Прошедшие:</b>\n"
-        cal_past = group_reminders_by_day(past)
-        for day, items in sorted(cal_past.items(), key=lambda x: x[0]):
-            msg += f"<i>{day}:</i>\n"
-            for idx, (event_dt, text, remind_before) in enumerate(sorted(items), 1):
+        calendar_p = group_by_day(sorted(past, key=lambda x: x[0]))
+        for day in sorted(calendar_p.keys()):
+            msg += f"<i>{day_label(day)}:</i>\n"
+            for event_dt, text, _ in sorted(calendar_p[day], key=lambda x: x[0]):
                 time_str = event_dt.strftime('%H:%M')
-                emoji = "🔔"
-                if any(word in text.lower() for word in ["тренировка", "спорт"]):
-                    emoji = "🏀"
-                elif any(word in text.lower() for word in ["поесть", "кушать", "ужин", "завтрак", "обед"]):
-                    emoji = "🍽️"
-                elif any(word in text.lower() for word in ["размяться", "разминка"]):
-                    emoji = "🤸‍♂️"
-                msg += f"<i>{idx}. {emoji} {time_str} — {text}</i>\n"
+                text_fmt = cap_task(text)
+                msg += f"<i><code>{time_str}</code> — {text_fmt}</i>\n"
             msg += "\n"
     else:
         msg += "<i>Прошедших напоминаний нет.</i>\n"
@@ -222,7 +236,7 @@ async def handle_voice(message: types.Message):
 
 async def notify_admin(msg):
     try:
-        await bot.send_message(ADMIN_ID, f"🔔 [Бот] {msg}", parse_mode="HTML")
+        await bot.send_message(ADMIN_ID, f"[Бот] {msg}", parse_mode="HTML")
     except Exception as err:
         log(f"Ошибка отправки админу: {err}")
 
@@ -241,7 +255,7 @@ async def check_and_send_reminders():
             try:
                 await bot.send_message(
                     user_id,
-                    f"🔔 <b>Напоминание:</b>\n<b>{text}</b>\n🕒 <b>{dt_to_str(datetime.datetime.fromisoformat(remind_at))}</b>",
+                    f"<b>Напоминание:</b>\n<b>{text}</b>\n🕒 <b>{dt_to_str(datetime.datetime.fromisoformat(remind_at))}</b>",
                     parse_mode="HTML"
                 )
                 mark_reminder_sent(reminder_id)
