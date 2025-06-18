@@ -25,7 +25,7 @@ ADMIN_ID = 570278582  # твой Telegram ID
 bot = Bot(token=TELEGRAM_BOT_TOKEN)
 dp = Dispatcher(bot)
 
-months = [
+months_ru = [
     "янв", "фев", "мар", "апр", "май", "июн",
     "июл", "авг", "сен", "окт", "ноя", "дек"
 ]
@@ -39,7 +39,7 @@ def log(msg):
     print(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {msg}")
 
 def dt_to_str(dt):
-    return f"{dt.day} {months[dt.month - 1]} в {dt:%H:%M}"
+    return f"{dt.day} {months_ru[dt.month - 1]} в {dt:%H:%M}"
 
 def pretty_reminder(parsed):
     event_dt = datetime.datetime.fromisoformat(parsed['remind_at'])
@@ -74,6 +74,9 @@ def pretty_reminder(parsed):
         f"{EMOJI_TEXT} <b>{text}</b>\n"
         f"Напомнить: <b>{remind_str}</b> {EMOJI_ARROW} <i>({before_str} до события)</i>"
     )
+
+def make_ru_date(dt: datetime.date):
+    return f"{dt.day:02d} {months_ru[dt.month - 1]}"
 
 @dp.message_handler(commands=['start'])
 async def cmd_start(message: types.Message):
@@ -112,12 +115,12 @@ async def cmd_list(message: types.Message):
     for event_dt, text, remind_before in future:
         day = event_dt.date()
         if day == now:
-            key = f"Сегодня ({day.strftime('%d %b')})"
+            key = f"Сегодня ({make_ru_date(day)})"
         elif day == tomorrow:
-            key = f"Завтра ({day.strftime('%d %b')})"
+            key = f"Завтра ({make_ru_date(day)})"
         else:
             weekday = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'][day.weekday()]
-            key = f"{day.strftime('%d %b')} ({weekday})"
+            key = f"{make_ru_date(day)} ({weekday})"
         calendar[key].append((event_dt, text, remind_before))
 
     def date_from_key(key):
@@ -128,16 +131,15 @@ async def cmd_list(message: types.Message):
         match = re.search(r'(\d{2}) (\w{3})', key)
         if match:
             d, m = match.groups()
-            m_dict = {
-                'янв': 1, 'фев': 2, 'мар': 3, 'апр': 4, 'май': 5, 'июн': 6,
-                'июл': 7, 'авг': 8, 'сен': 9, 'окт': 10, 'ноя': 11, 'дек': 12
-            }
+            m_dict = {m: i+1 for i, m in enumerate(months_ru)}
             m_num = m_dict.get(m.lower(), 1)
-            return datetime.date(now.year, m_num, int(d))
+            try:
+                return datetime.date(now.year, m_num, int(d))
+            except Exception:
+                return now + datetime.timedelta(days=1000)
         return now + datetime.timedelta(days=1000)
 
-    msg = ""  # убрали "📅 Твои напоминания:"
-
+    msg = "📅 <b>Твои напоминания:</b>\n\n"
     if future:
         for key in sorted(calendar.keys(), key=date_from_key):
             msg += f"<b>{key}</b>\n"
@@ -150,12 +152,9 @@ async def cmd_list(message: types.Message):
         msg += "<i>Нет будущих напоминаний.</i>\n\n"
 
     if past:
-        # Выдать только последние 5 прошедших (по времени)
-        past_sorted = sorted(past, key=lambda x: x[0])
-        last_5 = past_sorted[-5:]
         msg += "⏳ <b>Прошедшие:</b>\n"
-        for event_dt, text, _ in last_5:
-            date_str = event_dt.strftime('%d %b %H:%M')
+        for event_dt, text, _ in sorted(past, key=lambda x: x[0]):
+            date_str = f"{event_dt.day:02d} {months_ru[event_dt.month-1]} {event_dt.strftime('%H:%M')}"
             text_fmt = text.strip().capitalize()
             msg += f"<i>{date_str} — {text_fmt}</i>\n"
         msg += "\n"
