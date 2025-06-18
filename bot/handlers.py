@@ -106,55 +106,46 @@ async def cmd_list(message: types.Message):
             log(f"⛔️ Битое напоминание {reminder_id} (remind_at={remind_at}), пропускаю")
             continue
         event_dt = datetime.datetime.fromisoformat(remind_at)
-        if status == "active" and event_dt.date() >= now:
+        if status == "active" and event_dt >= now_dt:
             future.append((event_dt, text, remind_before))
         else:
             past.append((event_dt, text, remind_before))
 
+    # --- Группировка будущих по реальной дате ---
     calendar = defaultdict(list)
     for event_dt, text, remind_before in future:
         day = event_dt.date()
+        calendar[day].append((event_dt, text, remind_before))
+
+    # --- Сортировка дат ---
+    days_sorted = sorted(calendar.keys())
+    msg = "📅 <b>Твои напоминания:</b>\n\n"
+    for day in days_sorted:
+        # год отображаем только если не этот (можно убрать — кастомизируй под себя)
+        year_short = f" {str(day.year)[2:]}" if day.year != now.year else ""
         if day == now:
-            key = f"Сегодня ({make_ru_date(day)})"
+            key = f"Сегодня ({day.day:02d} {months_ru[day.month-1]})"
         elif day == tomorrow:
-            key = f"Завтра ({make_ru_date(day)})"
+            key = f"Завтра ({day.day:02d} {months_ru[day.month-1]})"
         else:
             weekday = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'][day.weekday()]
-            key = f"{make_ru_date(day)} ({weekday})"
-        calendar[key].append((event_dt, text, remind_before))
-
-    def date_from_key(key):
-        if "Сегодня" in key:
-            return now
-        if "Завтра" in key:
-            return tomorrow
-        match = re.search(r'(\d{2}) (\w{3})', key)
-        if match:
-            d, m = match.groups()
-            m_dict = {m: i+1 for i, m in enumerate(months_ru)}
-            m_num = m_dict.get(m.lower(), 1)
-            try:
-                return datetime.date(now.year, m_num, int(d))
-            except Exception:
-                return now + datetime.timedelta(days=1000)
-        return now + datetime.timedelta(days=1000)
-
-    msg = "📅 <b>Твои напоминания:</b>\n\n"
-    if future:
-        for key in sorted(calendar.keys(), key=date_from_key):
-            msg += f"<b>{key}</b>\n"
-            for event_dt, text, _ in sorted(calendar[key], key=lambda x: x[0]):
-                time_str = event_dt.strftime('%H:%M')
-                text_fmt = text.strip().capitalize()
-                msg += f"<code>{time_str}</code> — {text_fmt}\n"
-            msg += "\n"
-    else:
+            key = f"{day.day:02d} {months_ru[day.month-1]}{year_short} ({weekday})"
+        msg += f"<b>{key}</b>\n"
+        for event_dt, text, _ in sorted(calendar[day], key=lambda x: x[0]):
+            time_str = event_dt.strftime('%H:%M')
+            text_fmt = text.strip().capitalize()
+            msg += f"<code>{time_str}</code> — {text_fmt}\n"
+        msg += "\n"
+    if not days_sorted:
         msg += "<i>Нет будущих напоминаний.</i>\n\n"
 
+    # --- Прошедшие: только последние 5 ---
     if past:
         msg += "⏳ <b>Прошедшие:</b>\n"
-        for event_dt, text, _ in sorted(past, key=lambda x: x[0]):
-            date_str = f"{event_dt.day:02d} {months_ru[event_dt.month-1]} {event_dt.strftime('%H:%M')}"
+        past_sorted = sorted(past, key=lambda x: x[0])[-5:]
+        for event_dt, text, _ in past_sorted:
+            year_short = f" {str(event_dt.year)[2:]}" if event_dt.year != now.year else ""
+            date_str = f"{event_dt.day:02d} {months_ru[event_dt.month-1]}{year_short} {event_dt.strftime('%H:%M')}"
             text_fmt = text.strip().capitalize()
             msg += f"<i>{date_str} — {text_fmt}</i>\n"
         msg += "\n"
