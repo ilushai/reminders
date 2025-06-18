@@ -134,26 +134,46 @@ async def cmd_list(message: types.Message):
             return parts[0] + " " + parts[1].capitalize()
         return t
 
+    def group_by_day(items):
+        grouped = defaultdict(list)
+        for ev_dt, text, rem_bef in items:
+            grouped[ev_dt.date()].append((ev_dt, text, rem_bef))
+        return grouped
+
+    def day_label(day):
+        today = now.date()
+        tomorrow = today + datetime.timedelta(days=1)
+        if day == today:
+            return f"Сегодня ({day.strftime('%d %b')})"
+        if day == tomorrow:
+            return f"Завтра ({day.strftime('%d %b')})"
+        weekday = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'][day.weekday()]
+        return f"{day.strftime('%d %b')} ({weekday})"
+
     # --- Будущие напоминания ---
     if future:
-        future.sort(key=lambda x: x[0])
-        for event_dt, text, _ in future:
-            time_str = event_dt.strftime('%H:%M')
-            text_fmt = cap_task(text)
-            msg += f"<code>{time_str}</code> — {text_fmt}\n"
-        msg += "\n"
+        calendar = group_by_day(sorted(future, key=lambda x: x[0]))
+        for day in sorted(calendar.keys()):
+            msg += f"<b>{day_label(day)}:</b>\n"
+            for event_dt, text, _ in sorted(calendar[day], key=lambda x: x[0]):
+                time_str = event_dt.strftime('%H:%M')
+                text_fmt = cap_task(text)
+                msg += f"<code>{time_str}</code> — {text_fmt}\n"
+            msg += "\n"
     else:
         msg += "<i>Нет будущих напоминаний.</i>\n\n"
 
     # --- Прошедшие напоминания ---
     if past:
         msg += "⏳ <b>Прошедшие:</b>\n"
-        past.sort(key=lambda x: x[0])
-        for event_dt, text, _ in past:
-            time_str = event_dt.strftime('%H:%M')
-            text_fmt = cap_task(text)
-            msg += f"<i><code>{time_str}</code> — {text_fmt}</i>\n"
-        msg += "\n"
+        calendar_p = group_by_day(sorted(past, key=lambda x: x[0]))
+        for day in sorted(calendar_p.keys()):
+            msg += f"<i>{day_label(day)}:</i>\n"
+            for event_dt, text, _ in sorted(calendar_p[day], key=lambda x: x[0]):
+                time_str = event_dt.strftime('%H:%M')
+                text_fmt = cap_task(text)
+                msg += f"<i><code>{time_str}</code> — {text_fmt}</i>\n"
+            msg += "\n"
     else:
         msg += "<i>Прошедших напоминаний нет.</i>\n"
 
