@@ -75,21 +75,6 @@ def pretty_reminder(parsed):
         f"Напомнить: <b>{remind_str}</b> {EMOJI_ARROW} <i>({before_str} до события)</i>"
     )
 
-def group_reminders_by_day(reminders):
-    calendar = defaultdict(list)
-    now = datetime.datetime.now(pytz.timezone("Europe/Moscow")).date()
-    tomorrow = now + datetime.timedelta(days=1)
-    for event_dt, text, remind_before in reminders:
-        day = event_dt.date()
-        if day == now:
-            key = f"Сегодня ({day.strftime('%d %b')})"
-        elif day == tomorrow:
-            key = f"Завтра ({day.strftime('%d %b')})"
-        else:
-            weekday = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'][day.weekday()]
-            key = f"{day.strftime('%d %b')} ({weekday})"
-        calendar[key].append((event_dt, text, remind_before))
-    return calendar
 
 @dp.message_handler(commands=['start'])
 async def cmd_start(message: types.Message):
