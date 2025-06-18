@@ -26,8 +26,8 @@ bot = Bot(token=TELEGRAM_BOT_TOKEN)
 dp = Dispatcher(bot)
 
 months = [
-    "января", "февраля", "марта", "апреля", "мая", "июня",
-    "июля", "августа", "сентября", "октября", "ноября", "декабря"
+    "янв", "фев", "мар", "апр", "май", "июн",
+    "июл", "авг", "сен", "окт", "ноя", "дек"
 ]
 
 ISO_REGEX = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?")
@@ -75,22 +75,6 @@ def pretty_reminder(parsed):
         f"Напомнить: <b>{remind_str}</b> {EMOJI_ARROW} <i>({before_str} до события)</i>"
     )
 
-def group_reminders_by_day(reminders):
-    calendar = defaultdict(list)
-    now = datetime.datetime.now(pytz.timezone("Europe/Moscow")).date()
-    tomorrow = now + datetime.timedelta(days=1)
-    for event_dt, text, remind_before in reminders:
-        day = event_dt.date()
-        if day == now:
-            key = f"Сегодня ({day.strftime('%d %b')})"
-        elif day == tomorrow:
-            key = f"Завтра ({day.strftime('%d %b')})"
-        else:
-            weekday = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'][day.weekday()]
-            key = f"{day.strftime('%d %b')} ({weekday})"
-        calendar[key].append((event_dt, text, remind_before))
-    return calendar
-
 @dp.message_handler(commands=['start'])
 async def cmd_start(message: types.Message):
     log(f"/start от {message.from_user.id}")
@@ -107,73 +91,74 @@ async def cmd_list(message: types.Message):
         await message.reply("У тебя нет напоминаний.")
         return
 
-    now = datetime.datetime.now(pytz.timezone("Europe/Moscow"))
+    now_dt = datetime.datetime.now(pytz.timezone("Europe/Moscow"))
+    now = now_dt.date()
+    tomorrow = now + datetime.timedelta(days=1)
+
     future = []
     past = []
 
     for reminder_id, remind_at, text, remind_before, status in reminders:
         if not is_valid_iso(remind_at):
             log(f"⛔️ Битое напоминание {reminder_id} (remind_at={remind_at}), пропускаю")
-            continue  # Пропускаем битые
+            continue
         event_dt = datetime.datetime.fromisoformat(remind_at)
-        if status == "active" and event_dt >= now:
+        if status == "active" and event_dt.date() >= now:
             future.append((event_dt, text, remind_before))
         else:
             past.append((event_dt, text, remind_before))
 
-    msg = "📅 <b>Твои напоминания:</b>\n\n"
+    calendar = defaultdict(list)
+    for event_dt, text, remind_before in future:
+        day = event_dt.date()
+        if day == now:
+            key = f"Сегодня ({day.strftime('%d %b')})"
+        elif day == tomorrow:
+            key = f"Завтра ({day.strftime('%d %b')})"
+        else:
+            weekday = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'][day.weekday()]
+            key = f"{day.strftime('%d %b')} ({weekday})"
+        calendar[key].append((event_dt, text, remind_before))
 
-    def cap_task(t: str) -> str:
-        t = t.strip()
-        if not t:
-            return t
-        if t[0].isalnum():
-            return t[0].upper() + t[1:]
-        parts = t.split(" ", 1)
-        if len(parts) == 2:
-            return parts[0] + " " + parts[1].capitalize()
-        return t
+    def date_from_key(key):
+        if "Сегодня" in key:
+            return now
+        if "Завтра" in key:
+            return tomorrow
+        match = re.search(r'(\d{2}) (\w{3})', key)
+        if match:
+            d, m = match.groups()
+            m_dict = {
+                'янв': 1, 'фев': 2, 'мар': 3, 'апр': 4, 'май': 5, 'июн': 6,
+                'июл': 7, 'авг': 8, 'сен': 9, 'окт': 10, 'ноя': 11, 'дек': 12
+            }
+            m_num = m_dict.get(m.lower(), 1)
+            return datetime.date(now.year, m_num, int(d))
+        return now + datetime.timedelta(days=1000)
 
-    def group_by_day(items):
-        grouped = defaultdict(list)
-        for ev_dt, text, rem_bef in items:
-            grouped[ev_dt.date()].append((ev_dt, text, rem_bef))
-        return grouped
+    msg = ""  # убрали "📅 Твои напоминания:"
 
-    def day_label(day):
-        today = now.date()
-        tomorrow = today + datetime.timedelta(days=1)
-        if day == today:
-            return f"Сегодня ({day.strftime('%d %b')})"
-        if day == tomorrow:
-            return f"Завтра ({day.strftime('%d %b')})"
-        weekday = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'][day.weekday()]
-        return f"{day.strftime('%d %b')} ({weekday})"
-
-    # --- Будущие напоминания ---
     if future:
-        calendar = group_by_day(sorted(future, key=lambda x: x[0]))
-        for day in sorted(calendar.keys()):
-            msg += f"<b>{day_label(day)}:</b>\n"
-            for event_dt, text, _ in sorted(calendar[day], key=lambda x: x[0]):
+        for key in sorted(calendar.keys(), key=date_from_key):
+            msg += f"<b>{key}</b>\n"
+            for event_dt, text, _ in sorted(calendar[key], key=lambda x: x[0]):
                 time_str = event_dt.strftime('%H:%M')
-                text_fmt = cap_task(text)
+                text_fmt = text.strip().capitalize()
                 msg += f"<code>{time_str}</code> — {text_fmt}\n"
             msg += "\n"
     else:
         msg += "<i>Нет будущих напоминаний.</i>\n\n"
 
-    # --- Прошедшие напоминания ---
     if past:
+        # Выдать только последние 5 прошедших (по времени)
+        past_sorted = sorted(past, key=lambda x: x[0])
+        last_5 = past_sorted[-5:]
         msg += "⏳ <b>Прошедшие:</b>\n"
-        calendar_p = group_by_day(sorted(past, key=lambda x: x[0]))
-        for day in sorted(calendar_p.keys()):
-            msg += f"<i>{day_label(day)}:</i>\n"
-            for event_dt, text, _ in sorted(calendar_p[day], key=lambda x: x[0]):
-                time_str = event_dt.strftime('%H:%M')
-                text_fmt = cap_task(text)
-                msg += f"<i><code>{time_str}</code> — {text_fmt}</i>\n"
-            msg += "\n"
+        for event_dt, text, _ in last_5:
+            date_str = event_dt.strftime('%d %b %H:%M')
+            text_fmt = text.strip().capitalize()
+            msg += f"<i>{date_str} — {text_fmt}</i>\n"
+        msg += "\n"
     else:
         msg += "<i>Прошедших напоминаний нет.</i>\n"
 
