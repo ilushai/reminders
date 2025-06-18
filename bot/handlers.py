@@ -67,13 +67,12 @@ def pretty_reminder(parsed):
         EMOJI_TEXT = "🤸‍♂️"
 
     EMOJI_TIME = "🕒"
-    EMOJI_BELL = "🔔"
     EMOJI_ARROW = "➡️"
 
     return (
         f"{EMOJI_TIME} <b>{event_str}</b>\n"
         f"{EMOJI_TEXT} <b>{text}</b>\n"
-        f"{EMOJI_BELL} Напомнить: <b>{remind_str}</b> {EMOJI_ARROW} <i>({before_str} до события)</i>"
+        f"Напомнить: <b>{remind_str}</b> {EMOJI_ARROW} <i>({before_str} до события)</i>"
     )
 
 def group_reminders_by_day(reminders):
@@ -124,42 +123,37 @@ async def cmd_list(message: types.Message):
 
     msg = "📅 <b>Твои напоминания:</b>\n\n"
 
+    def cap_task(t: str) -> str:
+        t = t.strip()
+        if not t:
+            return t
+        if t[0].isalnum():
+            return t[0].upper() + t[1:]
+        parts = t.split(" ", 1)
+        if len(parts) == 2:
+            return parts[0] + " " + parts[1].capitalize()
+        return t
+
     # --- Будущие напоминания ---
     if future:
-        cal = group_reminders_by_day(future)
-        for day, items in sorted(cal.items(), key=lambda x: x[0]):
-            msg += f"<b>{day}:</b>\n"
-            for idx, (event_dt, text, remind_before) in enumerate(sorted(items), 1):
-                time_str = event_dt.strftime('%H:%M')
-                emoji = "🔔"
-                if any(word in text.lower() for word in ["тренировка", "спорт"]):
-                    emoji = "🏀"
-                elif any(word in text.lower() for word in ["поесть", "кушать", "ужин", "завтрак", "обед"]):
-                    emoji = "🍽️"
-                elif any(word in text.lower() for word in ["размяться", "разминка"]):
-                    emoji = "🤸‍♂️"
-                msg += f"{idx}. {emoji} <b>{time_str}</b> — <b>{text}</b>\n"
-            msg += "\n"
+        future.sort(key=lambda x: x[0])
+        for event_dt, text, _ in future:
+            time_str = event_dt.strftime('%H:%M')
+            text_fmt = cap_task(text)
+            msg += f"<code>{time_str}</code> — {text_fmt}\n"
+        msg += "\n"
     else:
         msg += "<i>Нет будущих напоминаний.</i>\n\n"
 
     # --- Прошедшие напоминания ---
     if past:
         msg += "⏳ <b>Прошедшие:</b>\n"
-        cal_past = group_reminders_by_day(past)
-        for day, items in sorted(cal_past.items(), key=lambda x: x[0]):
-            msg += f"<i>{day}:</i>\n"
-            for idx, (event_dt, text, remind_before) in enumerate(sorted(items), 1):
-                time_str = event_dt.strftime('%H:%M')
-                emoji = "🔔"
-                if any(word in text.lower() for word in ["тренировка", "спорт"]):
-                    emoji = "🏀"
-                elif any(word in text.lower() for word in ["поесть", "кушать", "ужин", "завтрак", "обед"]):
-                    emoji = "🍽️"
-                elif any(word in text.lower() for word in ["размяться", "разминка"]):
-                    emoji = "🤸‍♂️"
-                msg += f"<i>{idx}. {emoji} {time_str} — {text}</i>\n"
-            msg += "\n"
+        past.sort(key=lambda x: x[0])
+        for event_dt, text, _ in past:
+            time_str = event_dt.strftime('%H:%M')
+            text_fmt = cap_task(text)
+            msg += f"<i><code>{time_str}</code> — {text_fmt}</i>\n"
+        msg += "\n"
     else:
         msg += "<i>Прошедших напоминаний нет.</i>\n"
 
@@ -222,7 +216,7 @@ async def handle_voice(message: types.Message):
 
 async def notify_admin(msg):
     try:
-        await bot.send_message(ADMIN_ID, f"🔔 [Бот] {msg}", parse_mode="HTML")
+        await bot.send_message(ADMIN_ID, f"[Бот] {msg}", parse_mode="HTML")
     except Exception as err:
         log(f"Ошибка отправки админу: {err}")
 
@@ -241,7 +235,7 @@ async def check_and_send_reminders():
             try:
                 await bot.send_message(
                     user_id,
-                    f"🔔 <b>Напоминание:</b>\n<b>{text}</b>\n🕒 <b>{dt_to_str(datetime.datetime.fromisoformat(remind_at))}</b>",
+                    f"<b>Напоминание:</b>\n<b>{text}</b>\n🕒 <b>{dt_to_str(datetime.datetime.fromisoformat(remind_at))}</b>",
                     parse_mode="HTML"
                 )
                 mark_reminder_sent(reminder_id)
